@@ -39,20 +39,13 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			referrals := append(referredBy.Referrals,
-				models.Referral{
-					Username:  user.Account.Username,
-					IsPremium: user.Account.IsPremium,
-				},
-			)
-			user.ReferredBy = referredBy.Id
+			referredBy.AddReferral(user)
 
 			updateOperation := mongo.NewUpdateOneModel()
 			updateOperation.SetFilter(bson.M{"id": referredBy.Id})
-			updateOperation.SetUpdate(bson.M{"referrals": referrals})
+			updateOperation.SetUpdate(bson.M{"referrals": referredBy.Referrals})
 
 			operations = append(operations, updateOperation)
-
 		}
 	}
 

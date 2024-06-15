@@ -55,3 +55,12 @@ func NewUserFromTelegram(telegramUser auth.TelegramUser) *User {
 		Stat:         Stat{},
 	}
 }
+
+func (u *User) AddReferral(referredUser *User) {
+	referral := Referral{
+		Username:  referredUser.Account.Username,
+		IsPremium: referredUser.Account.IsPremium,
+	}
+	referredUser.ReferredBy = u.Id
+	u.Referrals = append(u.Referrals, referral)
+}
