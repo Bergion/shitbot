@@ -1,24 +1,15 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"shitbot/internal/auth"
 	"shitbot/internal/models"
+	response "shitbot/internal/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
-
-const InitialCoinNumber = 100
-
-type Response struct {
-	Success bool        `json:"success"`
-	Message interface{} `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-}
 
 type UserHandler struct {
 	collection *mongo.Collection
@@ -31,68 +22,58 @@ func NewUserHandler(client *mongo.Client) *UserHandler {
 
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	response := &Response{}
-	w.Header().Set("Content-Type", "application/json")
 	tgUser, ok := auth.FromContext(ctx)
 	if !ok {
-		response.Message = "Forbidden"
-		responseBody, _ := json.Marshal(response)
-		w.Write(responseBody)
-		w.WriteHeader(http.StatusForbidden)
+		response.Forbidden(w, "Forbidden")
 		return
 	}
 
+	user := models.NewUserFromTelegram(*tgUser)
+
+	operations := make([]mongo.WriteModel, 2)
+
 	refCode := r.URL.Query().Get("ref_code")
-	var referredBy models.User
 	if refCode != "" {
-		err := h.collection.FindOne(ctx, bson.M{"referralCode": refCode}).Decode(&referredBy)
+		referredBy := new(models.User)
+		err := h.collection.FindOne(ctx, bson.M{"referralCode": refCode}).Decode(referredBy)
 		if err != nil {
 			log.Println(err)
-			response.Message = "Invalid referral code"
-			responseBody, _ := json.Marshal(response)
-			w.Write(responseBody)
-			w.WriteHeader(http.StatusBadRequest)
-			return
+		} else {
+			referrals := append(referredBy.Referrals,
+				models.Referral{
+					Username:  user.Account.Username,
+					IsPremium: user.Account.IsPremium,
+				},
+			)
+			user.ReferredBy = referredBy.Id
+
+			updateOperation := mongo.NewUpdateOneModel()
+			updateOperation.SetFilter(bson.M{"id": referredBy.Id})
+			updateOperation.SetUpdate(bson.M{"referrals": referrals})
+
+			operations = append(operations, updateOperation)
+
 		}
 	}
 
-	user := &models.User{
-		Id:              primitive.NewObjectID(),
-		TelegramUserId:  tgUser.ID,
-		Username:        tgUser.Username,
-		IsPremium:       tgUser.IsPremium,
-		AllowsWriteToPm: tgUser.AllowsWriteToPm,
-		ReferralCode:    primitive.NewObjectID().Hex(),
-		ReferredBy:      referredBy.Id,
-		Wallet:          nil,
-		Coins:           InitialCoinNumber,
-	}
+	insertOperation := mongo.NewInsertOneModel()
+	insertOperation.SetDocument(user)
+	operations = append(operations, insertOperation)
 
-	if _, err := h.collection.InsertOne(ctx, user); err != nil {
+	if _, err := h.collection.BulkWrite(ctx, operations); err != nil {
 		log.Println(err)
-		response.Message = "Internal server"
-		responseBody, _ := json.Marshal(response)
-		w.Write(responseBody)
-		w.WriteHeader(http.StatusInternalServerError)
+		response.BadRequest(w, "Internal server error")
 		return
 	}
 
-	response.Success = true
-	response.Data = user
-	responseBody, _ := json.Marshal(response)
-	w.Write(responseBody)
+	response.Ok(w, user)
 }
 
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	response := &Response{}
-	w.Header().Set("Content-Type", "application/json")
 	tgUser, ok := auth.FromContext(ctx)
 	if !ok {
-		response.Message = "Forbidden"
-		responseBody, _ := json.Marshal(response)
-		w.Write(responseBody)
-		w.WriteHeader(http.StatusForbidden)
+		response.Forbidden(w, "Forbidden")
 		return
 	}
 
@@ -100,15 +81,9 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	err := h.collection.FindOne(ctx, bson.M{"telegramUserId": tgUser.ID}).Decode(&user)
 	if err != nil {
 		log.Println(err)
-		response.Message = "User not found"
-		responseBody, _ := json.Marshal(response)
-		w.Write(responseBody)
-		w.WriteHeader(http.StatusNotFound)
+		response.NotFound(w, "User not found")
 		return
 	}
 
-	response.Success = true
-	response.Data = user
-	responseBody, _ := json.Marshal(response)
-	w.Write(responseBody)
+	response.Ok(w, user)
 }
