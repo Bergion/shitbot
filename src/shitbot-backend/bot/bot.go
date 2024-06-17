@@ -68,11 +68,11 @@ func (b *TelegramBot) Start() {
 						},
 					},
 				}
-				msg, err := b.telegramBot.Send(setMenuConfig)
+				response, err := b.telegramBot.Request(setMenuConfig)
 				if err != nil {
 					log.Println(err)
 				}
-				fmt.Println(msg)
+				fmt.Println(response)
 
 			}
 		}

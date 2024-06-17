@@ -10,7 +10,7 @@ import (
 )
 
 func NewHTTPServer(lc fx.Lifecycle, handler http.Handler) *http.Server {
-	server := &http.Server{Addr: ":8080", Handler: handler}
+	server := &http.Server{Addr: ":80", Handler: handler}
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			ln, err := net.Listen("tcp", server.Addr)

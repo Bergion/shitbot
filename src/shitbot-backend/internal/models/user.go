@@ -9,7 +9,7 @@ import (
 
 type User struct {
 	Id           interface{} `bson:"id,omitempty" json:"id,omitempty"`
-	Account      Account     `bson:"accountSettings" json:"accountSettings"`
+	Account      Account     `bson:"account" json:"account"`
 	ReferralCode string      `bson:"referralCode" json:"referralCode"`
 	ReferredBy   interface{} `bson:"referredBy" json:"referredBy"`
 	Wallet       interface{} `bson:"wallet" json:"wallet"`

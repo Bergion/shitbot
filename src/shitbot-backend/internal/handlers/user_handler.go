@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"shitbot/internal/auth"
@@ -29,13 +30,12 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := models.NewUserFromTelegram(*tgUser)
-
-	operations := make([]mongo.WriteModel, 2)
+	var writeModels []mongo.WriteModel
 
 	refCode := r.URL.Query().Get("ref_code")
 	if refCode != "" {
-		referredBy := new(models.User)
-		err := h.collection.FindOne(ctx, bson.M{"referralCode": refCode}).Decode(referredBy)
+		var referredBy models.User
+		err := h.collection.FindOne(ctx, bson.M{"referralCode": refCode}).Decode(&referredBy)
 		if err != nil {
 			log.Println(err)
 		} else {
@@ -45,17 +45,17 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 			updateOperation.SetFilter(bson.M{"id": referredBy.Id})
 			updateOperation.SetUpdate(bson.M{"referrals": referredBy.Referrals})
 
-			operations = append(operations, updateOperation)
+			writeModels = append(writeModels, updateOperation)
 		}
 	}
 
 	insertOperation := mongo.NewInsertOneModel()
-	insertOperation.SetDocument(user)
-	operations = append(operations, insertOperation)
-
-	if _, err := h.collection.BulkWrite(ctx, operations); err != nil {
+	insertOperation.SetDocument(*user)
+	writeModels = append(writeModels, insertOperation)
+	fmt.Println(writeModels)
+	if _, err := h.collection.BulkWrite(ctx, writeModels); err != nil {
 		log.Println(err)
-		response.BadRequest(w, "Internal server error")
+		response.InternalServerError(w, "Internal server error")
 		return
 	}
 
@@ -71,7 +71,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user models.User
-	err := h.collection.FindOne(ctx, bson.M{"telegramUserId": tgUser.ID}).Decode(&user)
+	err := h.collection.FindOne(ctx, bson.M{"account.telegramUserId": tgUser.ID}).Decode(&user)
 	if err != nil {
 		log.Println(err)
 		response.NotFound(w, "User not found")
